@@ -1,0 +1,29 @@
+{
+  "schema": "v2",
+  "version": "2025-10-16",
+  "common": {
+    "templates": [
+      "体检周一至周六上午进行，建议{time_window}到检；周日及法定假日停检。",
+      "地点：医院西侧综合楼一楼健康管理中心；从西南门进入，车辆停放西侧停车场。",
+      "携带身份证/有效证件，按导引完成检查（70岁以上建议家属陪同）。",
+      "前三天避免饮酒/熬夜/剧烈运动，清淡饮食，保证睡眠。",
+      "前一晚20:00后禁食；当天空腹抽血，饮水不超过300ml，空腹项目后再进食。",
+      "着装宽松，避免紧身/连衣裙/连裤袜/亮片；不佩戴饰品。",
+      "尽量当日完成所有项目（预约项目除外），并交回导检单；报告预计7个工作日。"
+    ]
+  },
+  "rules": [
+    {"id": "female_menstruation", "when": {"gender": ["female"]}, "messages": ["女性尽量避开月经期进行血尿/妇检。"]},
+    {"id": "female_unmarried", "when": {"gender": ["female"], "marital_status": ["未婚"]}, "messages": ["妇科检查限已婚（有性生活史），未婚者可不做该项或改期。"]},
+    {"id": "pregnancy_xray", "when": {"is_pregnant": true}, "messages": ["孕期勿做X线相关检查（DR/CT/钼靶/双能X线），需检查请先告知医务人员。"]},
+    {"id": "chronic_htn_chd", "when": {"chronic_contains_any": ["高血压","冠心病"]}, "messages": ["高血压/冠心病：当晨可少量饮水(<20ml)按时服药。"]},
+    {"id": "chronic_dm", "when": {"chronic_contains_any": ["糖尿病"]}, "messages": ["糖尿病：随身带药，空腹项目后尽快进食并按医嘱用药，避免低血糖。"]},
+    {"id": "items_urology_us", "when": {"items_contains_any": ["前列腺","膀胱","子宫附件","盆腔"]}, "messages": ["前列腺/膀胱/子宫附件彩超前2~3小时尽量不解小便，保持膀胱充盈。"]},
+    {"id": "items_urine", "when": {"items_contains_any": ["尿常规","尿检"]}, "messages": ["尿检：采集中段尿8~10ml，女性避开月经期。"]},
+    {"id": "items_stool", "when": {"items_contains_any": ["粪便","便潜血"]}, "messages": ["粪便：取蚕豆大小，勿与尿液混合；有黏液/脓血取异常部位送检。"]},
+    {"id": "items_endoscopy", "when": {"items_contains_any": ["胃镜","肠镜","胃肠镜"]}, "messages": ["胃/肠镜：前一晚禁食，当日空腹；无痛镜需有人陪同，当日不驾车。"]},
+    {"id": "items_xray", "when": {"items_contains_any": ["DR","X线","CT","钼靶","双能X线"]}, "messages": ["X线检查有电离辐射，孕期女性勿做；检查时去除金属物。"]},
+    {"id": "items_mri", "when": {"items_contains_any": ["磁共振","MRI","MR"]}, "messages": ["磁共振：体内金属植入/支架/起搏器者先咨询专科医师确认可检。"]}
+  ]
+}
+
