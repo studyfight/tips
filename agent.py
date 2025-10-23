@@ -1,3 +1,18 @@
+# -*- coding: utf-8 -*-
+"""
+tips/agent.py - 个性化体检提示智能代理
+
+核心功能：
+1. 批量生成个性化体检前注意事项
+2. 基于规则引擎：根据性别、年龄、慢病、检查项目等匹配规则
+3. 配置驱动：规则可通过JSON文件配置
+
+并发安全：
+- 无可变实例状态：self.rules和self.client初始化后不变
+- 方法无副作用：run_batch仅根据输入生成输出
+- 线程安全：多个并发请求可共用同一实例
+"""
+
 from typing import List, Dict, Any
 
 from common.clients import InspectionSystemClient
@@ -5,13 +20,46 @@ from .schemas import TipsIn, TipsOut, TipsBatchIn, TipsBatchOut, PersonTipOut, P
 import os, json
 
 class PersonalizedTipsAgent:
-	"""个性化体检前提示Agent：预约成功后输出提醒（列表）与预约结果结论。"""
+	"""个性化体检前提示Agent
+	
+	设计原则：
+	1. 规则驱动：通过JSON配置规则，不需训练模型
+	2. 无状态设计：所有方法为纯函数，无副作用
+	3. 配置灵活：支持v1/v2规则格式，向后兼容
+	
+	并发安全：
+	- self.rules: 只读规则字典，初始化后不变
+	- self.client: 只读客户端实例
+	- 无全局可变状态，支持并发调用
+	"""
 	def __init__(self, client: InspectionSystemClient | None = None):
+		"""初始化提示Agent
+		
+		Args:
+			client: 体检系统客户端（预留，当前未使用）
+		"""
 		self.client = client or InspectionSystemClient()
-		# 外置规则（可选）：tips/config/rules.json
+		# 加载外部规则文件（可选）：tips/config/rules.json
+		# 如果文件不存在，使用内置默认规则
 		self.rules: Dict[str, Any] = self._load_rules()
 
 	def _load_rules(self) -> Dict[str, Any]:
+		"""加载提示规则配置
+		
+		加载顺序：
+		1. 尝试从 tips/config/rules.json 加载外部配置
+		2. 如果失败，使用下方内置默认规则
+		
+		规则格式（v2 schema）：
+		- common.templates: 通用模板文案
+		- rules: 条件匹配规则列表
+			- id: 规则标识
+			- when: 触发条件（gender/age/chronic_conditions/items等）
+			- messages: 命中后添加的提示内容
+		
+		Returns:
+			规则配置字典
+		"""
 		try:
 			base_dir = os.path.dirname(__file__)
 			rules_path = os.path.join(base_dir, "config", "rules.json")
@@ -74,6 +122,28 @@ class PersonalizedTipsAgent:
 		return any(k for k in kws if k and k in text)
 
 	def _gen_person_messages(self, p: PersonTipIn) -> List[str]:
+		"""为单个人员生成个性化提示消息
+		
+		处理逻辑：
+		1. 添加通用模板文案（时间、地点、禁食等）
+		2. 逐条匹配个性化规则：
+		   - 性别相关：女性注意事项、孕期禁忌
+		   - 年龄相关：70岁以上家属陪同
+		   - 慢病相关：糖尿病、高血压用药指导
+		   - 检查项目相关：胃镜、彩超、X线等专项准备
+		3. 返回排序后的消息列表
+		
+		并发安全：
+		- 纯函数，不修改实例状态
+		- 仅读取self.rules，不修改
+		- 多线程并发调用安全
+		
+		Args:
+			p: 单个人员的信息
+			
+		Returns:
+			个性化提示消息列表
+		"""
 		# 若为 v2 规则：使用通用模板 + 规则匹配
 		if isinstance(self.rules, dict) and isinstance(self.rules.get("rules"), list):
 			msgs: List[str] = []
@@ -153,15 +223,52 @@ class PersonalizedTipsAgent:
 		return msgs
 
 	def run_batch(self, payload: TipsBatchIn) -> TipsBatchOut:
+		"""批量生成个性化提示主方法
+		
+		处理流程：
+		1. 遍历每个人员信息
+		2. 为每个人生成个性化消息
+		3. 组装返回结果，包含trace_id和timestamp
+		
+		并发安全：
+		- 纯函数，无副作用
+		- 不修改实例状态
+		- 多个并发请求互不影响
+		
+		用户区分：
+		- payload.user_id: 业务层面的用户标识
+		- trace_id: 系统生成的请求追踪ID
+		- timestamp: 响应时间戳
+		
+		Args:
+			payload: 批量请求输入，包含user_id和persons列表
+			
+		Returns:
+			批量提示结果，包含每个人的提示内容
+		"""
 		import uuid
 		from datetime import datetime
+		
+		# 批量处理每个人员
 		reminders: List[PersonTipOut] = []
 		for person in payload.persons:
+			# 为每个人生成个性化消息
 			msgs = self._gen_person_messages(person)
-			reminders.append(PersonTipOut(name=person.name, phone=person.phone, messages=msgs, text="\n".join(f"- {m}" for m in msgs)))
+			# 组装输出结果
+			reminders.append(PersonTipOut(
+				name=person.name, 
+				phone=person.phone, 
+				messages=msgs,  # 消息列表
+				text="\n".join(f"- {m}" for m in msgs)  # 格式化文本
+			))
+		
+		# 返回标准化响应
 		return TipsBatchOut(
-			trace_id=f"req_{uuid.uuid4().hex[:12]}",
+			trace_id=f"req_{uuid.uuid4().hex[:12]}",  # 生成请求追踪ID
 			status="success",
-			timestamp=datetime.now().isoformat(),
-			data={"user_id": payload.user_id, "reminders": [r.model_dump() for r in reminders]}
+			timestamp=datetime.now().isoformat(),  # ISO 8601时间戳
+			data={
+				"user_id": payload.user_id,  # 返回用户ID
+				"reminders": [r.model_dump() for r in reminders]  # 批量提示结果
+			}
 		)
